@@ -1331,9 +1331,6 @@ struct rtl8xxxu_fileops {
 				  u32 ramask, int sgi);
 	void (*report_connect) (struct rtl8xxxu_priv *priv,
 				u8 macid, bool connect);
-	int (*adapter_tx) (struct ieee80211_hw *hw,
-			   struct ieee80211_sta *sta,
-			   struct sk_buff *skb);
 	int writeN_block_size;
 	char tx_desc_size;
 	char rx_desc_size;

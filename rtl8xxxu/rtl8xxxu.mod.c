@@ -40,7 +40,6 @@ __attribute__((section("__versions"))) = {
 	{ 0x39799adb, __VMLINUX_SYMBOL_STR(ieee80211_alloc_hw_nm) },
 	{ 0x86382af2, __VMLINUX_SYMBOL_STR(__mutex_init) },
 	{ 0x27e1a049, __VMLINUX_SYMBOL_STR(printk) },
-	{ 0x449ad0a7, __VMLINUX_SYMBOL_STR(memcmp) },
 	{ 0x3ff56275, __VMLINUX_SYMBOL_STR(usb_control_msg) },
 	{ 0x16305289, __VMLINUX_SYMBOL_STR(warn_slowpath_null) },
 	{ 0x4e27fa10, __VMLINUX_SYMBOL_STR(skb_push) },
@@ -93,4 +92,4 @@ MODULE_ALIAS("usb:v0BDApB720d*dc*dsc*dp*icFFiscFFipFFin*");
 MODULE_ALIAS("usb:v0BDAp8179d*dc*dsc*dp*icFFiscFFipFFin*");
 MODULE_ALIAS("usb:v0BDAp0179d*dc*dsc*dp*icFFiscFFipFFin*");
 
-MODULE_INFO(srcversion, "73BD1E5B36573DC8826FBB9");
+MODULE_INFO(srcversion, "6AC5C41AD2206170C918D4B");

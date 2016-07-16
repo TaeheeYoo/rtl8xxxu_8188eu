@@ -1886,7 +1886,7 @@ rtl8xxxu_read_efuse8(struct rtl8xxxu_priv *priv, u16 offset, u8 *data)
 
 static int rtl8xxxu_read_efuse(struct rtl8xxxu_priv *priv)
 {
-	struct device *dev = &priv->udev->dev;
+	str
 	int i, ret = 0;
 	u8 val8, word_mask, header, extheader;
 	u16 val16, efuse_addr, offset;
@@ -4834,12 +4834,6 @@ static void rtl8xxxu_tx(struct ieee80211_hw *hw,
 	int ret;
 	bool usedesc40, ampdu_enable;
 	struct urb *_urb = NULL;
-
-	if (priv->fops->adapter_tx) {
-		priv->fops->adapter_tx(hw, control->sta, skb);
-		goto tx_out;
-	}
-
 
 	if (skb_headroom(skb) < tx_desc_size) {
 		dev_warn(dev,
