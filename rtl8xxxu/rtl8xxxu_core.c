@@ -1886,7 +1886,6 @@ rtl8xxxu_read_efuse8(struct rtl8xxxu_priv *priv, u16 offset, u8 *data)
 
 static int rtl8xxxu_read_efuse(struct rtl8xxxu_priv *priv)
 {
-	str
 	int i, ret = 0;
 	u8 val8, word_mask, header, extheader;
 	u16 val16, efuse_addr, offset;
@@ -1903,9 +1902,10 @@ static int rtl8xxxu_read_efuse(struct rtl8xxxu_priv *priv)
 		val32 = (val32 & ~EFUSE_SELECT_MASK) | EFUSE_WIFI_SELECT;
 		rtl8xxxu_write32(priv, REG_EFUSE_TEST, val32);
 	}
-
+#if 0
 	dev_dbg(dev, "Booting from %s\n",
 		priv->boot_eeprom ? "EEPROM" : "EFUSE");
+#endif
 
 	rtl8xxxu_write8(priv, REG_EFUSE_ACCESS, EFUSE_ACCESS_ENABLE);
 
@@ -1965,9 +1965,11 @@ static int rtl8xxxu_read_efuse(struct rtl8xxxu_priv *priv)
 		/* We have 8 bits to indicate validity */
 		map_addr = offset * 8;
 		if (map_addr >= EFUSE_MAP_LEN) {
+#if 0
 			dev_warn(dev, "%s: Illegal map_addr (%04x), "
 				 "efuse corrupt!\n",
 				 __func__, map_addr);
+#endif
 			ret = -EINVAL;
 			goto exit;
 		}
@@ -6096,13 +6098,11 @@ static int rtl8xxxu_probe(struct usb_interface *interface,
 		goto exit;
 	}
 
-#if 0
 	ret = rtl8xxxu_read_efuse(priv);
 	if (ret) {
 		dev_err(&udev->dev, "Fatal - failed to read EFuse\n");
 		goto exit;
 	}
-#endif
 
 	ret = priv->fops->parse_efuse(priv);
 	if (ret) {
@@ -6111,7 +6111,7 @@ static int rtl8xxxu_probe(struct usb_interface *interface,
 	}
 
 	rtl8xxxu_print_chipinfo(priv);
-#if 0
+#if 1
 	ret = priv->fops->load_firmware(priv);
 #else
 	init_completion(&priv->firmware_loading_complete);

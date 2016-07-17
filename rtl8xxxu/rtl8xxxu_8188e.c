@@ -1206,6 +1206,8 @@ static void rtl88e_set_iqk_matrix(struct rtl8xxxu_priv *priv,
 	}
 }
 
+#if 1
+
 static void _rtl88eu_enable_fw_download(struct rtl8xxxu_priv *priv, bool enable)
 {
 	u8 tmp;
@@ -1505,6 +1507,7 @@ void rtl88eu_fill_h2c_cmd(struct rtl8xxxu_priv *priv,
 					  RTL88eu_MAX_H2C_BOX_NUMS;
 	} while ((!bcmd_down) && (retry_cnts--));
 }
+#endif
 
 void rtl88e_phy_rf6052_set_bandwidth(struct rtl8xxxu_priv *priv, u8 bandwidth)
 {
@@ -2245,7 +2248,6 @@ static void _rtl88e_ccxpower_index_check(struct rtl8xxxu_priv *priv,
 					 u8 *ofdmpowerlevel, u8 *bw20powerlevel,
 					 u8 *bw40powerlevel)
 {
-
 	rtlphy.cur_cck_txpwridx = cckpowerlevel[0];
 	rtlphy.cur_ofdm24g_txpwridx = ofdmpowerlevel[0];
 	rtlphy.cur_bw20_txpwridx = bw20powerlevel[0];
@@ -3663,15 +3665,11 @@ static void _rtl88eu_read_txpower_info(struct rtl8xxxu_priv *priv, u8 *hwinfo)
 #endif
 	}
 	
-	if (!rtlefuse.autoload_failflag) {
+	rtlefuse.eeprom_regulatory =
+		(hwinfo[EEPROM_RF_BOARD_OPTION_88E] & 0x7);
+	if (hwinfo[EEPROM_RF_BOARD_OPTION_88E] == 0xFF)
 		rtlefuse.eeprom_regulatory =
-			(hwinfo[EEPROM_RF_BOARD_OPTION_88E] & 0x7);
-		if (hwinfo[EEPROM_RF_BOARD_OPTION_88E] == 0xFF)
-			rtlefuse.eeprom_regulatory =
-				(EEPROM_DEFAULT_BOARD_OPTION & 0x7);
-	} else {
-		rtlefuse.eeprom_regulatory = 0;
-	}
+			(EEPROM_DEFAULT_BOARD_OPTION & 0x7);
 	RT_TRACE(priv, COMP_ERR, DBG_WARNING,
 		 "eeprom_regulatory = 0x%x\n", rtlefuse.eeprom_regulatory);
 }
@@ -3756,7 +3754,6 @@ void read_efuse(struct rtl8xxxu_priv *priv, u16 _offset, u16 _size_byte, u8 *pbu
 	const u16 efuse_max_section = EFUSE_MAX_SECTION;
 	const u32 efuse_len = EFUSE_REAL_CONTENT_LEN;
 	u16 **efuse_word;
-	u16 efuse_utilized = 0;
 	u8 efuse_usage;
 
 	if ((_offset + _size_byte) > HWSET_MAX_SIZE) {
@@ -3785,10 +3782,8 @@ void read_efuse(struct rtl8xxxu_priv *priv, u16 _offset, u16 _size_byte, u8 *pbu
 			efuse_word[j][i] = 0xFFFF;
 
 	read_efuse_byte(priv, efuse_addr, rtemp8);
-	if (*rtemp8 != 0xFF) {
-		efuse_utilized++;
+	if (*rtemp8 != 0xFF)
 		efuse_addr++;
-	}
 
 	while ((*rtemp8 != 0xFF) && (efuse_addr < efuse_len)) {
 		/*  Check PG header for section num.  */
@@ -3820,7 +3815,6 @@ void read_efuse(struct rtl8xxxu_priv *priv, u16 _offset, u16 _size_byte, u8 *pbu
 				if (!(wren & 0x01)) {
 					read_efuse_byte(priv, efuse_addr, rtemp8);
 					efuse_addr++;
-					efuse_utilized++;
 					efuse_word[i][offset] =
 							 (*rtemp8 & 0xff);
 
@@ -3829,7 +3823,6 @@ void read_efuse(struct rtl8xxxu_priv *priv, u16 _offset, u16 _size_byte, u8 *pbu
 
 					read_efuse_byte(priv, efuse_addr, rtemp8);
 					efuse_addr++;
-					efuse_utilized++;
 					efuse_word[i][offset] |=
 					    (((u16)*rtemp8 << 8) & 0xff00);
 
@@ -3843,7 +3836,6 @@ void read_efuse(struct rtl8xxxu_priv *priv, u16 _offset, u16 _size_byte, u8 *pbu
 
 		read_efuse_byte(priv, efuse_addr, rtemp8);
 		if (*rtemp8 != 0xFF && (efuse_addr < efuse_len)) {
-			efuse_utilized++;
 			efuse_addr++;
 		}
 	}
@@ -3883,144 +3875,6 @@ void rtl_efuse_shadow_map_update(struct rtl8xxxu_priv *priv)
 			HWSET_MAX_SIZE);
 }
 
-
-static void _rtl88eu_read_adapter_info(struct rtl8xxxu_priv *priv, int epromtype)
-{
-	u16 i, usvalue;
-	u8 hwinfo[HWSET_MAX_SIZE] = {0};
-	u16 eeprom_id;
-
-	if (epromtype == EEPROM_BOOT_EFUSE) {
-		rtl_efuse_shadow_map_update(priv);
-		memcpy((void *)hwinfo,
-		       (void *)&rtlefuse.efuse_map[EFUSE_INIT_MAP][0],
-		       HWSET_MAX_SIZE);
-	} else if (epromtype == EEPROM_93C46) {
-		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
-			 "RTL819X Not boot from eeprom, check it !!");
-		return;
-	} else {
-		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
-			 "boot from neither eeprom nor efuse, check it !!");
-		return;
-	}
-	
-	eeprom_id = le16_to_cpu(*((__le16 *)hwinfo));
-	if (eeprom_id != 0x8129) {
-		RT_TRACE(priv, COMP_ERR, DBG_WARNING,
-			 "EEPROM ID(%#x) is invalid!!\n", eeprom_id);
-	} else {
-		;
-	}
-
-
-	for (i = 0; i < 6; i += 2) {
-		usvalue = *(u16 *)&hwinfo[EEPROM_MAC_ADDR + i];
-		*((u16 *) (&rtlefuse.dev_addr[i])) = usvalue;
-	}
-
-	ether_addr_copy(priv->mac_addr, rtlefuse.dev_addr);
-
-	/* Hal_ReadPowerSavingMode88E(hw, eeprom->efuse_eeprom_data); */
-	_rtl88eu_read_txpower_info(priv, hwinfo);
-
-	if (!rtlefuse.autoload_failflag) {
-		rtlefuse.eeprom_version = hwinfo[EEPROM_VERSION_88E];
-		if (rtlefuse.eeprom_version == 0xFF)
-			rtlefuse.eeprom_version = 0;
-	} else {
-		rtlefuse.eeprom_version = 1;
-	}
-	
-	rtlefuse.txpwr_fromeprom = true; /* TODO */
-	RT_TRACE(priv, COMP_ERR, DBG_WARNING,
-		 "eeprom_version = %d\n", rtlefuse.eeprom_version);
-
-	rtlefuse.eeprom_channelplan = hwinfo[EEPROM_CHANNELPLAN];
-	rtlefuse.channel_plan = rtlefuse.eeprom_channelplan;
-	
-	if (!rtlefuse.autoload_failflag) {
-		rtlefuse.crystalcap = hwinfo[EEPROM_XTAL_88E];
-		if (rtlefuse.crystalcap == 0xFF)
-			rtlefuse.crystalcap = EEPROM_DEFAULT_CRYSTALCAP_88E;
-	} else {
-		rtlefuse.crystalcap = EEPROM_DEFAULT_CRYSTALCAP_88E;
-	}
-	if (!rtlefuse.autoload_failflag) {
-		rtlefuse.eeprom_oemid = hwinfo[EEPROM_CUSTOMERID_88E];
-	} else {
-		rtlefuse.eeprom_oemid = 0;
-	}
-	RT_TRACE(priv, COMP_ERR, DBG_WARNING,
-		 "EEPROM Customer ID: 0x%2x\n", rtlefuse.eeprom_oemid);
-	rtlefuse.antenna_div_cfg =
-		(hwinfo[EEPROM_RF_BOARD_OPTION_88E] & 0x18) >> 3;
-	if (hwinfo[EEPROM_RF_BOARD_OPTION_88E] == 0xFF)
-		rtlefuse.antenna_div_cfg = 0;
-	rtlefuse.antenna_div_type = hwinfo[EEPROM_RF_ANTENNA_OPT_88E];
-	if (rtlefuse.antenna_div_type == 0xFF)
-		rtlefuse.antenna_div_type = 0x01;
-	if (rtlefuse.antenna_div_type == CG_TRX_HW_ANTDIV ||
-		rtlefuse.antenna_div_type == CGCS_RX_HW_ANTDIV)
-		rtlefuse.antenna_div_cfg = 1;
-
-	if (!rtlefuse.autoload_failflag)
-		rtlefuse.board_type = (hwinfo[EEPROM_RF_BOARD_OPTION_88E]
-					& 0xE0) >> 5;
-	else
-		rtlefuse.board_type = 0;
-
-	if (!rtlefuse.autoload_failflag)
-		rtlefuse.eeprom_thermalmeter =
-			hwinfo[EEPROM_THERMAL_METER_88E];
-	else
-		rtlefuse.eeprom_thermalmeter =
-			EEPROM_DEFAULT_THERMALMETER;
-
-	if (rtlefuse.eeprom_thermalmeter == 0xff ||
-	    rtlefuse.autoload_failflag) {
-		rtlefuse.apk_thermalmeterignore = true;
-		rtlefuse.eeprom_thermalmeter = EEPROM_DEFAULT_THERMALMETER;
-	}
-	/* TODO */
-#if 0
-	if (rtlhal->oem_id == RT_CID_DEFAULT) {
-		switch (rtlefuse.eeprom_oemid) {
-		case EEPROM_CID_DEFAULT:
-			if (rtlefuse.eeprom_did == 0x8179) {
-				if (rtlefuse.eeprom_svid == 0x1025) {
-					rtlhal->oem_id = RT_CID_819X_ACER;
-				} else if ((rtlefuse.eeprom_svid == 0x10EC &&
-				     rtlefuse.eeprom_smid == 0x0179) ||
-				     (rtlefuse.eeprom_svid == 0x17AA &&
-				     rtlefuse.eeprom_smid == 0x0179)) {
-					rtlhal->oem_id = RT_CID_819X_LENOVO;
-				} else if (rtlefuse.eeprom_svid == 0x103c &&
-					   rtlefuse.eeprom_smid == 0x197d) {
-					rtlhal->oem_id = RT_CID_819X_HP;
-				} else {
-					rtlhal->oem_id = RT_CID_DEFAULT;
-				}
-			} else {
-				rtlhal->oem_id = RT_CID_DEFAULT;
-			}
-			break;
-		case EEPROM_CID_TOSHIBA:
-			rtlhal->oem_id = RT_CID_TOSHIBA;
-			break;
-		case EEPROM_CID_QMI:
-			rtlhal->oem_id = RT_CID_819X_QMI;
-			break;
-		case EEPROM_CID_WHQL:
-		default:
-			rtlhal->oem_id = RT_CID_DEFAULT;
-			break;
-
-		}
-	}
-#endif
-
-}
 
 bool rtl_hal_pwrseqcmdparsing(struct rtl8xxxu_priv *priv, u8 cut_version,
 			      u8 faversion, u8 interface_type,
@@ -4781,25 +4635,6 @@ void rtl88eu_card_disable(struct rtl8xxxu_priv *priv)
 	rtlphy.iqk_initialized = false;
 }
 
-void rtl88eu_read_eeprom_info(struct rtl8xxxu_priv *priv)
-{
-	u8 eeValue;
-	int epromtype;
-
-	/* check system boot selection */
-	eeValue = rtl8xxxu_read8(priv, REG_9346CR);
-	
-	if (eeValue & BIT(4)) {
-		RT_TRACE(priv, COMP_ERR, DBG_DMESG, "Boot from EEPROM\n");
-		epromtype = EEPROM_93C46;
-	} else {
-		RT_TRACE(priv, COMP_ERR, DBG_DMESG, "Boot from EFUSE\n");
-		epromtype = EEPROM_BOOT_EFUSE;
-	}
-
-	_rtl88eu_read_adapter_info(priv, epromtype);
-}
-
 void rtl88eu_update_interrupt_mask(struct rtl8xxxu_priv *priv,
 				   u32 add_msr, u32 rm_msr)
 {
@@ -4991,14 +4826,6 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 	memset(&p_ra, 0, sizeof(struct rate_adaptive));
 	memset(&dm_pstable, 0, sizeof(struct ps_t));
 
-#if 1
-	/* TODO
-	 *  temp code
-	 */
-	rtl88eu_read_eeprom_info(priv);
-	rtlefuse.autoload_failflag = 0;
-#endif
-
 	spin_lock_init(&rf_lock);
 	local_save_flags(flags);
 	local_irq_disable();
@@ -5008,6 +4835,7 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 		RT_TRACE(priv, COMP_ERR, DBG_EMERG, "init mac failed!\n");
 		goto exit;
 	}
+#if 0
 	status = rtl88eu_download_fw(priv, false);
 	if (status) {
 		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
@@ -5015,6 +4843,7 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 		status = true;
 		return status;
 	}
+#endif
 	local_irq_enable();
 #if 0
 	rtlhal->last_hmeboxnum = 0;
@@ -5112,28 +4941,107 @@ exit:
 	return status;
 }
 
-static int rtl8192eu_parse_efuse(struct rtl8xxxu_priv *priv)
+static int rtl8188eu_parse_efuse(struct rtl8xxxu_priv *priv)
 {
+	u16 i, usvalue;
+	u8 hwinfo[HWSET_MAX_SIZE] = {0};
+	u16 eeprom_id;
+
+	memcpy((void *)hwinfo,
+			(void *)priv->efuse_wifi.raw, HWSET_MAX_SIZE);
+
+	eeprom_id = le16_to_cpu(*((__le16 *)hwinfo));
+	if (eeprom_id != 0x8129) {
+		RT_TRACE(priv, COMP_ERR, DBG_WARNING,
+				"EEPROM ID(%#x) is invalid!!\n", eeprom_id);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < 6; i += 2) {
+		usvalue = *(u16 *)&hwinfo[EEPROM_MAC_ADDR + i];
+		*((u16 *) (&rtlefuse.dev_addr[i])) = usvalue;
+	}
+
+	ether_addr_copy(priv->mac_addr, rtlefuse.dev_addr);
+
+	_rtl88eu_read_txpower_info(priv, hwinfo);
+
+	rtlefuse.eeprom_version = hwinfo[EEPROM_VERSION_88E];
+	if (rtlefuse.eeprom_version == 0xFF)
+		rtlefuse.eeprom_version = 0;
+
+	RT_TRACE(priv, COMP_ERR, DBG_WARNING,
+			"eeprom_version = %d\n", rtlefuse.eeprom_version);
+
+	rtlefuse.eeprom_channelplan = hwinfo[EEPROM_CHANNELPLAN];
+	rtlefuse.channel_plan = rtlefuse.eeprom_channelplan;
+
+	rtlefuse.crystalcap = hwinfo[EEPROM_XTAL_88E];
+	if (rtlefuse.crystalcap == 0xFF)
+		rtlefuse.crystalcap = EEPROM_DEFAULT_CRYSTALCAP_88E;
+	rtlefuse.eeprom_oemid = hwinfo[EEPROM_CUSTOMERID_88E];
+	RT_TRACE(priv, COMP_ERR, DBG_WARNING,
+			"EEPROM Customer ID: 0x%2x\n", rtlefuse.eeprom_oemid);
+	rtlefuse.antenna_div_cfg =
+		(hwinfo[EEPROM_RF_BOARD_OPTION_88E] & 0x18) >> 3;
+	if (hwinfo[EEPROM_RF_BOARD_OPTION_88E] == 0xFF)
+		rtlefuse.antenna_div_cfg = 0;
+	rtlefuse.antenna_div_type = hwinfo[EEPROM_RF_ANTENNA_OPT_88E];
+	if (rtlefuse.antenna_div_type == 0xFF)
+		rtlefuse.antenna_div_type = 0x01;
+	if (rtlefuse.antenna_div_type == CG_TRX_HW_ANTDIV ||
+			rtlefuse.antenna_div_type == CGCS_RX_HW_ANTDIV)
+		rtlefuse.antenna_div_cfg = 1;
+
+	rtlefuse.board_type = (hwinfo[EEPROM_RF_BOARD_OPTION_88E]
+			& 0xE0) >> 5;
+	rtlefuse.eeprom_thermalmeter =
+		hwinfo[EEPROM_THERMAL_METER_88E];
+
+	/* TODO */
+#if 0
+	if (rtlhal->oem_id == RT_CID_DEFAULT) {
+		switch (rtlefuse.eeprom_oemid) {
+			case EEPROM_CID_DEFAULT:
+				if (rtlefuse.eeprom_did == 0x8179) {
+					if (rtlefuse.eeprom_svid == 0x1025) {
+						rtlhal->oem_id = RT_CID_819X_ACER;
+					} else if ((rtlefuse.eeprom_svid == 0x10EC &&
+								rtlefuse.eeprom_smid == 0x0179) ||
+							(rtlefuse.eeprom_svid == 0x17AA &&
+							 rtlefuse.eeprom_smid == 0x0179)) {
+						rtlhal->oem_id = RT_CID_819X_LENOVO;
+					} else if (rtlefuse.eeprom_svid == 0x103c &&
+							rtlefuse.eeprom_smid == 0x197d) {
+						rtlhal->oem_id = RT_CID_819X_HP;
+					} else {
+						rtlhal->oem_id = RT_CID_DEFAULT;
+					}
+				} else {
+					rtlhal->oem_id = RT_CID_DEFAULT;
+				}
+				break;
+			case EEPROM_CID_TOSHIBA:
+				rtlhal->oem_id = RT_CID_TOSHIBA;
+				break;
+			case EEPROM_CID_QMI:
+				rtlhal->oem_id = RT_CID_819X_QMI;
+				break;
+			case EEPROM_CID_WHQL:
+			default:
+				rtlhal->oem_id = RT_CID_DEFAULT;
+				break;
+
+		}
+	}
+#endif
+
 	return 0;
 }
 
 static int rtl8188eu_load_firmware(struct rtl8xxxu_priv *priv)
 {
-#if 0
-	char *fw_name;
-	int ret;
-
-	fw_name = "rtlwifi/rtl8188eufw.bin";
-
-	init_completion(&priv->firmware_loading_complete);
-	err = request_firmware_nowait(THIS_MODULE, 1,
-				      fw_name, &priv->udev->dev,
-				      GFP_KERNEL, hw, rtl_fw_cb);
-
-
-	return ret;
-#endif
-	return 0;
+	return rtl8xxxu_load_firmware(priv, "rtlwifi/rtl8188eufw.bin");
 }
 
 static int rtl8192eu_power_on(struct rtl8xxxu_priv *priv)
@@ -5472,7 +5380,7 @@ void rtl8188eu_disable_rf(struct rtl8xxxu_priv *priv)
 
 struct rtl8xxxu_fileops rtl8188eu_fops = {
 	.init_device = rtl88eu_hw_init, //done
-	.parse_efuse = rtl8192eu_parse_efuse,
+	.parse_efuse = rtl8188eu_parse_efuse,
 	.load_firmware = rtl8188eu_load_firmware,
 	.power_on = rtl8192eu_power_on,
 	.power_off = rtl88eu_card_disable,
