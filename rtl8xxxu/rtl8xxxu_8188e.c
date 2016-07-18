@@ -2780,38 +2780,6 @@ void rtl88e_phy_sw_chnl_callback(struct rtl8xxxu_priv *priv)
 	RT_TRACE(priv, COMP_SCAN, DBG_TRACE, "\n");
 }
 
-u8 rtl88e_phy_sw_chnl(struct rtl8xxxu_priv *priv)
-{
-
-	if (rtlphy.sw_chnl_inprogress)
-		return 0;
-	if (rtlphy.set_bwmode_inprogress)
-		return 0;
-#if 0
-	RT_ASSERT((priv.current_channel <= 14),
-		  "WIRELESS_MODE_G but channel>14");
-#endif
-	rtlphy.sw_chnl_inprogress = true;
-	rtlphy.sw_chnl_stage = 0;
-	rtlphy.sw_chnl_step = 0;
-#if 0
-	if (!(is_hal_stop(rtlhal)))) {
-#else
-	if (1) {
-#endif
-		rtl88e_phy_sw_chnl_callback(priv);
-		RT_TRACE(priv, COMP_CHAN, DBG_LOUD,
-			 "sw_chnl_inprogress false schdule workitem current channel %d\n",
-			 rtlphy.current_channel);
-		rtlphy.sw_chnl_inprogress = false;
-	} else {
-		RT_TRACE(priv, COMP_CHAN, DBG_LOUD,
-			 "sw_chnl_inprogress false driver sleep or unload\n");
-		rtlphy.sw_chnl_inprogress = false;
-	}
-	return 1;
-}
-
 bool rtl88e_phy_mac_config(struct rtl8xxxu_priv *priv)
 {
 	bool rtstatus = _rtl88e_phy_config_mac_with_headerfile(priv);
@@ -4108,19 +4076,6 @@ static void _rtl88eu_agg_setting_rx_update( struct rtl8xxxu_priv *priv)
 }
 #endif
 
-#if 1
-static void _rtl88eu_init_agg_setting(struct rtl8xxxu_priv *priv)
-{
-
-	/* TODO */
-#if 1
-	_rtl88eu_agg_setting_tx_update(priv);
-	_rtl88eu_agg_setting_rx_update(priv);
-	/* haldata->UsbRxHighSpeedMode = false; */
-#endif
-}
-#endif
-
 static void _rtl88eu_init_beacon_parameters(struct rtl8xxxu_priv *priv)
 {
 	rtl8xxxu_write16(priv, REG_BCN_CTRL, 0x1010);
@@ -4192,41 +4147,12 @@ static int _rtl88eu_init_mac(struct rtl8xxxu_priv *priv)
 	_rtl88eu_init_adaptive_ctrl(priv);
 	_rtl88eu_init_edca(priv);
 	_rtl88eu_init_retry_function(priv);
-	/* TODO */
-#if 0
-	_rtl88eu_init_agg_setting(priv);
-#endif
+	
 	//여기 꼭 enable 해야함
 	//rtl88e_phy_set_bw_mode(priv, NL80211_CHAN_HT20);
 	_rtl88eu_init_beacon_parameters(priv);
 	_rtl88eu_init_txbuffer_boundary(priv, boundary);
 	return 0;
-}
-
-static void rtl_fw_do_work(const struct firmware *firmware, void *context,
-			   bool is_wow)
-{
-	struct ieee80211_hw *hw = context;
-	struct rtl8xxxu_priv *priv = hw->priv;
-	int err;
-
-	RT_TRACE(priv, COMP_ERR, DBG_LOUD,
-		 "Firmware callback routine entered!\n");
-	complete(&priv->firmware_loading_complete);
-	if (!firmware) {
-	}
-#if 0
-	if (firmware->size > rtlpriv->max_fw_size) {
-		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
-			 "Firmware is too big!\n");
-		release_firmware(firmware);
-		return;
-	}
-#endif
-	memcpy(priv->fw_data, firmware->data,
-			firmware->size);
-	priv->fw_size = firmware->size;
-	release_firmware(firmware);
 }
 
 void rtl_cam_reset_all_entry(struct rtl8xxxu_priv *priv)
@@ -4335,40 +4261,6 @@ void rtl88eu_card_disable(struct rtl8xxxu_priv *priv)
 void rtl88eu_update_interrupt_mask(struct rtl8xxxu_priv *priv,
 				   u32 add_msr, u32 rm_msr)
 {
-}
-
-//생략 많이 함 다시 구성할것 */
-void rtl88eu_update_channel_access_setting(struct rtl8xxxu_priv *priv)
-{
-	u16 sifs_timer;
-
-	rtl8xxxu_write8(priv, REG_SLOT, 9);
-#if 0
-	if (!rtlmac.ht_enable)
-		sifs_timer = 0x0a0a;
-	else
-		sifs_timer = 0x0e0e;
-#else
-	sifs_timer = 0x0a0a;
-#endif
-
-	rtl8xxxu_write8(priv, REG_SIFS_CTX + 1, sifs_timer >> 8);
-	rtl8xxxu_write8(priv, REG_SIFS_TRX + 1, sifs_timer & 0x000000ff);
-
-	rtl8xxxu_write8(priv, REG_SPEC_SIFS + 1, sifs_timer & 0x000000ff);
-	rtl8xxxu_write8(priv, REG_MAC_SPEC_SIFS + 1, sifs_timer & 0x000000ff);
-#if 0
-	if (!rtlmac.ht_enable)
-		rtl8xxxu_write16(priv, REG_RESP_SIFS_OFDM,
-				0x0e0e);
-	else
-		rtl8xxxu_write16(priv, REG_RESP_SIFS_OFDM,
-				*((u16 *)val));
-#else
-	rtl8xxxu_write16(priv, REG_RESP_SIFS_OFDM,
-			0x0e0e);
-#endif
-
 }
 
 void rtl88eu_enable_hw_security_config(struct rtl8xxxu_priv *priv)
@@ -4651,20 +4543,8 @@ static int rtl8192eu_init_phy_rf(struct rtl8xxxu_priv *priv)
 	return 0;
 }
 
-static void rtl8192eu_phy_iq_calibrate(struct rtl8xxxu_priv *priv)
-{
-}
-
-
 static void rtl8192e_enable_rf(struct rtl8xxxu_priv *priv)
 {
-}
-
-void rtl8188eu_config_channel(struct ieee80211_hw *hw)
-{
-	struct rtl8xxxu_priv *priv = hw->priv;
-	rtl88e_phy_sw_chnl(priv);
-	rtl88eu_update_channel_access_setting(priv);
 }
 
 int rtl88eu_rx_query_desc(struct rtl8xxxu_priv *priv,
@@ -4831,142 +4711,6 @@ int rtl88eu_rx_query_desc(struct rtl8xxxu_priv *priv,
 
 
 
-static void
-rtl8192e_set_tx_power(struct rtl8xxxu_priv *priv, int channel, bool ht40)
-{
-	u32 val32, ofdm, mcs;
-	u8 cck, ofdmbase, mcsbase;
-	int group, tx_idx;
-
-	tx_idx = 0;
-	group = rtl8xxxu_gen2_channel_to_group(channel);
-
-	cck = priv->cck_tx_power_index_A[group];
-
-	val32 = rtl8xxxu_read32(priv, REG_TX_AGC_A_CCK1_MCS32);
-	val32 &= 0xffff00ff;
-	val32 |= (cck << 8);
-	rtl8xxxu_write32(priv, REG_TX_AGC_A_CCK1_MCS32, val32);
-
-	val32 = rtl8xxxu_read32(priv, REG_TX_AGC_B_CCK11_A_CCK2_11);
-	val32 &= 0xff;
-	val32 |= ((cck << 8) | (cck << 16) | (cck << 24));
-	rtl8xxxu_write32(priv, REG_TX_AGC_B_CCK11_A_CCK2_11, val32);
-
-	ofdmbase = priv->ht40_1s_tx_power_index_A[group];
-	ofdmbase += priv->ofdm_tx_power_diff[tx_idx].a;
-	ofdm = ofdmbase | ofdmbase << 8 | ofdmbase << 16 | ofdmbase << 24;
-
-	rtl8xxxu_write32(priv, REG_TX_AGC_A_RATE18_06, ofdm);
-	rtl8xxxu_write32(priv, REG_TX_AGC_A_RATE54_24, ofdm);
-
-	mcsbase = priv->ht40_1s_tx_power_index_A[group];
-	if (ht40)
-		mcsbase += priv->ht40_tx_power_diff[tx_idx++].a;
-	else
-		mcsbase += priv->ht20_tx_power_diff[tx_idx++].a;
-	mcs = mcsbase | mcsbase << 8 | mcsbase << 16 | mcsbase << 24;
-
-	rtl8xxxu_write32(priv, REG_TX_AGC_A_MCS03_MCS00, mcs);
-	rtl8xxxu_write32(priv, REG_TX_AGC_A_MCS07_MCS04, mcs);
-	rtl8xxxu_write32(priv, REG_TX_AGC_A_MCS11_MCS08, mcs);
-	rtl8xxxu_write32(priv, REG_TX_AGC_A_MCS15_MCS12, mcs);
-
-	if (priv->tx_paths > 1) {
-		cck = priv->cck_tx_power_index_B[group];
-
-		val32 = rtl8xxxu_read32(priv, REG_TX_AGC_B_CCK1_55_MCS32);
-		val32 &= 0xff;
-		val32 |= ((cck << 8) | (cck << 16) | (cck << 24));
-		rtl8xxxu_write32(priv, REG_TX_AGC_B_CCK1_55_MCS32, val32);
-
-		val32 = rtl8xxxu_read32(priv, REG_TX_AGC_B_CCK11_A_CCK2_11);
-		val32 &= 0xffffff00;
-		val32 |= cck;
-		rtl8xxxu_write32(priv, REG_TX_AGC_B_CCK11_A_CCK2_11, val32);
-
-		ofdmbase = priv->ht40_1s_tx_power_index_B[group];
-		ofdmbase += priv->ofdm_tx_power_diff[tx_idx].b;
-		ofdm = ofdmbase | ofdmbase << 8 |
-			ofdmbase << 16 | ofdmbase << 24;
-
-		rtl8xxxu_write32(priv, REG_TX_AGC_B_RATE18_06, ofdm);
-		rtl8xxxu_write32(priv, REG_TX_AGC_B_RATE54_24, ofdm);
-
-		mcsbase = priv->ht40_1s_tx_power_index_B[group];
-		if (ht40)
-			mcsbase += priv->ht40_tx_power_diff[tx_idx++].b;
-		else
-			mcsbase += priv->ht20_tx_power_diff[tx_idx++].b;
-		mcs = mcsbase | mcsbase << 8 | mcsbase << 16 | mcsbase << 24;
-
-		rtl8xxxu_write32(priv, REG_TX_AGC_B_MCS03_MCS00, mcs);
-		rtl8xxxu_write32(priv, REG_TX_AGC_B_MCS07_MCS04, mcs);
-		rtl8xxxu_write32(priv, REG_TX_AGC_B_MCS11_MCS08, mcs);
-		rtl8xxxu_write32(priv, REG_TX_AGC_B_MCS15_MCS12, mcs);
-	}
-}
-
-static int rtl8xxxu_gen1_channel_to_group(int channel)
-{
-	int group;
-
-	if (channel < 4)
-		group = 0;
-	else if (channel < 10)
-		group = 1;
-	else
-		group = 2;
-
-	return group;
-}
-
-static void _rtl_tx_desc_checksum(u8 *txdesc)
-{
-	u16 *ptr = (u16 *)txdesc;
-	u16	checksum = 0;
-	u32 index;
-
-	/* Clear first */
-	SET_TX_DESC_TX_DESC_CHECKSUM(txdesc, 0);
-	for (index = 0; index < 16; index++)
-		checksum = checksum ^ (*(ptr + index));
-	SET_TX_DESC_TX_DESC_CHECKSUM(txdesc, checksum);
-}
-
-
-static enum rtl_desc_qsel _rtl8188eu_mq_to_descq(struct ieee80211_hw *hw,
-					 __le16 fc, u16 mac80211_queue_index)
-{
-	enum rtl_desc_qsel qsel;
-
-	if (unlikely(ieee80211_is_beacon(fc))) {
-		qsel = QSLT_BEACON;
-		goto out;
-	}
-	if (ieee80211_is_mgmt(fc)) {
-		qsel = QSLT_MGNT;
-		goto out;
-	}
-	switch (mac80211_queue_index) {
-	case 0:	/* VO */
-		qsel = QSLT_VO;
-		break;
-	case 1:	/* VI */
-		qsel = QSLT_VI;
-		break;
-	case 3:	/* BK */
-		qsel = QSLT_BK;
-		break;
-	case 2:	/* BE */
-	default:
-		qsel = QSLT_BE;
-		break;
-	}
-out:
-	return qsel;
-}
-
 void rtl8188eu_disable_rf(struct rtl8xxxu_priv *priv)
 {
 }
@@ -4982,11 +4726,7 @@ struct rtl8xxxu_fileops rtl8188eu_fops = {
 	.init_phy_bb = rtl8192eu_init_phy_bb,
 	.init_phy_rf = rtl8192eu_init_phy_rf,
 	.phy_iq_calibrate = rtl88e_phy_iq_calibrate, //done
-#if 0
-	.config_channel = rtl8188eu_config_channel, //maybe done?
-#else
 	.config_channel = rtl8xxxu_gen1_config_channel,
-#endif
 	.parse_rx_desc = rtl88eu_rx_query_desc,
 #if 1
 	.enable_rf = rtl8192e_enable_rf,
