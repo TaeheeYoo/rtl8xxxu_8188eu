@@ -1208,7 +1208,6 @@ static void rtl88e_set_iqk_matrix(struct rtl8xxxu_priv *priv,
 
 void rtl88e_phy_rf6052_set_bandwidth(struct rtl8xxxu_priv *priv, u8 bandwidth)
 {
-	u32 val32;
 	switch (bandwidth) {
 	case HT_CHANNEL_WIDTH_20:
 		rtlphy.rfreg_chnlval[0] = ((rtlphy.rfreg_chnlval[0] &
@@ -1932,7 +1931,6 @@ static void _rtl88e_get_txpower_index(struct rtl8xxxu_priv *priv, u8 channel,
 				      u8 *bw20powerlevel, u8 *bw40powerlevel)
 {
 	u8 index = (channel - 1);
-	u8 rf_path = 0;
 
 	handle_path_a(index, cckpowerlevel,
 			ofdmpowerlevel, bw20powerlevel,
@@ -2502,7 +2500,7 @@ static void _rtl88e_phy_iq_calibrate(struct rtl8xxxu_priv *priv,
 				     long result[][8], u8 t, bool is2t)
 {
 	u32 i;
-	u8 patha_ok, pathb_ok;
+	u8 patha_ok;
 	u32 adda_reg[IQK_ADDA_REG_NUM] = {
 		0x85c, 0xe6c, 0xe70, 0xe74,
 		0xe78, 0xe7c, 0xe80, 0xe84,
@@ -2987,84 +2985,6 @@ static void _rtl88eu_reset_8051(struct rtl8xxxu_priv *priv)
 	rtl8xxxu_write8(priv, REG_SYS_FUNC_EN+1, value8 | (BIT(2)));
 }
 
-void rtl88eu_iol_mode_enable(struct rtl8xxxu_priv *priv, u8 enable)
-{
-	u8 reg_0xf0 = 0;
-
-	if (enable) {
-		/* Enable initial offload */
-		reg_0xf0 = rtl8xxxu_read8(priv, REG_SYS_CFG);
-		rtl8xxxu_write8(priv, REG_SYS_CFG, reg_0xf0 | SW_OFFLOAD_EN);
-
-#if 0
-		if (!rtlhal->fw_ready)
-			_rtl88eu_reset_8051(priv);
-#else
-		//여기 확인하라
-			_rtl88eu_reset_8051(priv);
-#endif
-	} else {
-		/* disable initial offload */
-		reg_0xf0 = rtl8xxxu_read8(priv, REG_SYS_CFG);
-		rtl8xxxu_write8(priv, REG_SYS_CFG, reg_0xf0 & ~SW_OFFLOAD_EN);
-	}
-}
-
-s32 rtl88eu_iol_execute(struct rtl8xxxu_priv *priv, u8 control)
-{
-	s32 status = false;
-	u8 reg_0x88 = 0;
-	u32 start = 0, passing_time = 0;
-
-	control = control & 0x0f;
-	reg_0x88 = rtl8xxxu_read8(priv, REG_HMBOX_EXT_0);
-	rtl8xxxu_write8(priv, REG_HMBOX_EXT_0, reg_0x88 | control);
-
-	start = jiffies;
-	while ((reg_0x88 = rtl8xxxu_read8(priv, REG_HMBOX_EXT_0)) & control &&
-	       (passing_time = rtl_get_passing_time_ms(start)) < 1000) {
-		;
-	}
-
-	reg_0x88 = rtl8xxxu_read8(priv, REG_HMBOX_EXT_0);
-	status = (reg_0x88 & control) ? false : true;
-	if (reg_0x88 & control<<4)
-		status = false;
-	return status;
-}
-
-static s32 _rtl88eu_iol_init_llt_table(struct rtl8xxxu_priv *priv, u8 boundary)
-{
-	s32 rst = true;
-
-	rtl88eu_iol_mode_enable(priv, 1);
-	rtl8xxxu_write8(priv, REG_TDECTRL+1, boundary);
-	rst = rtl88eu_iol_execute(priv, CMD_INIT_LLT);
-	rtl88eu_iol_mode_enable(priv, 0);
-	return rst;
-}
-
-bool rtl88eu_iol_applied(struct rtl8xxxu_priv *priv)
-{
-	/* TODO*/
-	return true;
-}
-
-s32 rtl88eu_iol_efuse_patch(struct rtl8xxxu_priv *priv)
-{
-	s32 result = true;
-
-	if (rtl88eu_iol_applied(priv)) {
-		rtl88eu_iol_mode_enable(priv, 1);
-		result = rtl88eu_iol_execute(priv, CMD_READ_EFUSE_MAP);
-		if (result == true)
-			result = rtl88eu_iol_execute(priv, CMD_EFUSE_PATCH);
-
-		rtl88eu_iol_mode_enable(priv, 0);
-	}
-	return result;
-}
-
 static void _rtl88eu_set_bcn_ctrl_reg(struct rtl8xxxu_priv *priv,
 				      u8 set_bits, u8 clear_bits)
 {
@@ -3136,38 +3056,33 @@ s32 rtl88eu_init_llt_table(struct rtl8xxxu_priv *priv, u8 boundary)
 	u32 i;
 	u32 last_entry_of_tx_pkt_buf = LAST_ENTRY_OF_TX_PKT_BUFFER;
 
-	if (rtl88eu_iol_applied(priv)) {
-		status = _rtl88eu_iol_init_llt_table(priv, boundary);
-	} else {
-		for (i = 0; i < (boundary - 1); i++) {
-			status = _rtl88eu_llt_write(priv, i, i + 1);
-			if (true != status)
-				return status;
-		}
-
-		/* end of list */
-		status = _rtl88eu_llt_write(priv, (boundary - 1), 0xFF);
+	for (i = 0; i < (boundary - 1); i++) {
+		status = _rtl88eu_llt_write(priv, i, i + 1);
 		if (true != status)
 			return status;
-
-		/*  Make the other pages as ring buffer
-		 *  This ring buffer is used as beacon buffer
-		 *  if we config this MAC as two MAC transfer.
-		 *  Otherwise used as local loopback buffer. */
-		for (i = boundary; i < last_entry_of_tx_pkt_buf; i++) {
-			status = _rtl88eu_llt_write(priv, i, (i + 1));
-			if (true != status)
-				return status;
-		}
-
-		/* Let last entry point to the start entry of ring buffer */
-		status = _rtl88eu_llt_write(priv, last_entry_of_tx_pkt_buf,
-					    boundary);
-		if (true != status) {
-			return status;
-		}
 	}
 
+	/* end of list */
+	status = _rtl88eu_llt_write(priv, (boundary - 1), 0xFF);
+	if (true != status)
+		return status;
+
+	/*  Make the other pages as ring buffer
+	 *  This ring buffer is used as beacon buffer
+	 *  if we config this MAC as two MAC transfer.
+	 *  Otherwise used as local loopback buffer. */
+	for (i = boundary; i < last_entry_of_tx_pkt_buf; i++) {
+		status = _rtl88eu_llt_write(priv, i, (i + 1));
+		if (true != status)
+			return status;
+	}
+
+	/* Let last entry point to the start entry of ring buffer */
+	status = _rtl88eu_llt_write(priv, last_entry_of_tx_pkt_buf,
+			boundary);
+	if (true != status) {
+		return status;
+	}
 	return status;
 }
 
@@ -4320,15 +4235,7 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 		RT_TRACE(priv, COMP_ERR, DBG_EMERG, "init mac failed!\n");
 		goto exit;
 	}
-#if 0
-	status = rtl88eu_download_fw(priv, false);
-	if (status) {
-		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
-			 "Download Firmware failed!!\n");
-		status = true;
-		return status;
-	}
-#endif
+	
 	local_irq_enable();
 #if 0
 	rtlhal->last_hmeboxnum = 0;
@@ -4347,12 +4254,6 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 	rtl88e_phy_rf_config(priv);
 	rtlphy.rfreg_chnlval[0] = rtl_get_rfreg(priv, (enum radio_path)0,
 				      RF_CHNLBW, RFREG_OFFSET_MASK);
-	status = rtl88eu_iol_efuse_patch(priv);
-	if (status == false) {
-		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
-			 "rtl88eu_iol_efuse_patch failed\n");
-		goto exit;
-	}
 
 	value16 = rtl8xxxu_read16(priv, REG_CR);
 	value16 |= (MACTXEN | MACRXEN);
@@ -4711,12 +4612,8 @@ int rtl88eu_rx_query_desc(struct rtl8xxxu_priv *priv,
 
 
 
-void rtl8188eu_disable_rf(struct rtl8xxxu_priv *priv)
-{
-}
-
 struct rtl8xxxu_fileops rtl8188eu_fops = {
-	.init_device = rtl88eu_hw_init, //done
+	.init_device = rtl88eu_hw_init,
 	.parse_efuse = rtl8188eu_parse_efuse,
 	.load_firmware = rtl8188eu_load_firmware,
 	.power_on = rtl8192eu_power_on,
@@ -4725,7 +4622,7 @@ struct rtl8xxxu_fileops rtl8188eu_fops = {
 	.llt_init = rtl8xxxu_auto_llt_table,
 	.init_phy_bb = rtl8192eu_init_phy_bb,
 	.init_phy_rf = rtl8192eu_init_phy_rf,
-	.phy_iq_calibrate = rtl88e_phy_iq_calibrate, //done
+	.phy_iq_calibrate = rtl88e_phy_iq_calibrate,
 	.config_channel = rtl8xxxu_gen1_config_channel,
 	.parse_rx_desc = rtl88eu_rx_query_desc,
 #if 1
@@ -4733,13 +4630,9 @@ struct rtl8xxxu_fileops rtl8188eu_fops = {
 #else
 	.enable_rf = rtl8xxxu_gen1_enable_rf,
 #endif
-#if 1
 	.disable_rf = rtl8xxxu_gen1_disable_rf,
-#else
-	.disable_rf = rtl8188eu_disable_rf,
-#endif
 	.usb_quirks = rtl8xxxu_gen1_usb_quirks,
-	.set_tx_power = rtl88e_phy_set_txpower_level, //done
+	.set_tx_power = rtl88e_phy_set_txpower_level,
 	.update_rate_mask = rtl8xxxu_update_rate_mask,
 	.report_connect = rtl8xxxu_gen2_report_connect,
 	.writeN_block_size = 128,
