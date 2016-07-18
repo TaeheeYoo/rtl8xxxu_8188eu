@@ -57,50 +57,6 @@
 #include "table.h"
 #include "trx.h"
 
-//////////////////////////////////////////테스트//////////////////////////////////////
-#define DM_DIG_THRESH_HIGH		40
-#define DM_DIG_THRESH_LOW		35
-#define DM_FALSEALARM_THRESH_LOW	400
-#define DM_FALSEALARM_THRESH_HIGH	1000
-
-#define DM_DIG_MAX			0x3e
-#define DM_DIG_MIN			0x1e
-#define DM_DIG_MAX_AP			0x32
-#define DM_DIG_BACKOFF_MAX		12
-#define DM_DIG_BACKOFF_MIN		-4
-#define DM_DIG_BACKOFF_DEFAULT		10
-
-enum cck_packet_detection_threshold {
-	CCK_PD_STAGE_LOWRSSI = 0,
-	CCK_PD_STAGE_HIGHRSSI = 1,
-	CCK_FA_STAGE_LOW = 2,
-	CCK_FA_STAGE_HIGH = 3,
-	CCK_PD_STAGE_MAX = 4,
-};
-
-enum dm_dig_ext_port_alg_e {
-	DIG_EXT_PORT_STAGE_0 = 0,
-	DIG_EXT_PORT_STAGE_1 = 1,
-	DIG_EXT_PORT_STAGE_2 = 2,
-	DIG_EXT_PORT_STAGE_3 = 3,
-	DIG_EXT_PORT_STAGE_MAX = 4,
-};
-
-enum dm_dig_connect_e {
-	DIG_STA_DISCONNECT,
-	DIG_STA_CONNECT,
-	DIG_STA_BEFORE_CONNECT,
-	DIG_MULTISTA_DISCONNECT,
-	DIG_MULTISTA_CONNECT,
-	DIG_AP_DISCONNECT,
-	DIG_AP_CONNECT,
-	DIG_AP_ADD_STATION,
-	DIG_CONNECT_MAX
-};
-//////////////////////////////////////////테스트///////////////////////////////////////////////////////
-
-
-
 struct wlan_pwr_cfg rtl8188ee_power_on_flow[RTL8188EE_TRANS_CARDEMU_TO_ACT_STEPS
 					+ RTL8188EE_TRANS_END_STEPS] = {
 	RTL8188EE_TRANS_CARDEMU_TO_ACT
@@ -1126,86 +1082,6 @@ void rtl_set_rfreg(struct rtl8xxxu_priv *priv,
 		 regaddr, bitmask, data, rfpath);
 }
 
-///////////////////////////DM//////////////////////////////////////////////////
-#define	CAL_SWING_OFF(_off, _dir, _size, _del)				\
-	do {								\
-		for (_off = 0; _off < _size; _off++) {			\
-			if (_del < thermal_threshold[_dir][_off]) {	\
-				if (_off != 0)				\
-					_off--;				\
-				break;					\
-			}						\
-		}							\
-		if (_off >= _size)					\
-			_off = _size - 1;				\
-	} while (0)
-
-static void rtl88e_set_iqk_matrix(struct rtl8xxxu_priv *priv,
-				  u8 ofdm_index, u8 rfpath,
-				  long iqk_result_x, long iqk_result_y)
-{
-	long ele_a = 0, ele_d, ele_c = 0, value32;
-
-	ele_d = (ofdmswing_table[ofdm_index] & 0xFFC00000)>>22;
-
-	if (iqk_result_x != 0) {
-		if ((iqk_result_x & 0x00000200) != 0)
-			iqk_result_x = iqk_result_x | 0xFFFFFC00;
-		ele_a = ((iqk_result_x * ele_d)>>8)&0x000003FF;
-
-		if ((iqk_result_y & 0x00000200) != 0)
-			iqk_result_y = iqk_result_y | 0xFFFFFC00;
-		ele_c = ((iqk_result_y * ele_d)>>8)&0x000003FF;
-
-		switch (rfpath) {
-		case RF90_PATH_A:
-			value32 = (ele_d << 22)|((ele_c & 0x3F)<<16) | ele_a;
-			rtl_set_bbreg(priv, ROFDM0_XATXIQIMBALANCE,
-				      MASKDWORD, value32);
-			value32 = (ele_c & 0x000003C0) >> 6;
-			rtl_set_bbreg(priv, ROFDM0_XCTXAFE, MASKH4BITS,
-				      value32);
-			value32 = ((iqk_result_x * ele_d) >> 7) & 0x01;
-			rtl_set_bbreg(priv, ROFDM0_ECCATHRESHOLD, BIT(24),
-				      value32);
-			break;
-		case RF90_PATH_B:
-			value32 = (ele_d << 22)|((ele_c & 0x3F)<<16) | ele_a;
-			rtl_set_bbreg(priv, ROFDM0_XBTXIQIMBALANCE, MASKDWORD,
-				      value32);
-			value32 = (ele_c & 0x000003C0) >> 6;
-			rtl_set_bbreg(priv, ROFDM0_XDTXAFE, MASKH4BITS, value32);
-			value32 = ((iqk_result_x * ele_d) >> 7) & 0x01;
-			rtl_set_bbreg(priv, ROFDM0_ECCATHRESHOLD, BIT(28),
-				      value32);
-			break;
-		default:
-			break;
-		}
-	} else {
-		switch (rfpath) {
-		case RF90_PATH_A:
-			rtl_set_bbreg(priv, ROFDM0_XATXIQIMBALANCE,
-				      MASKDWORD, ofdmswing_table[ofdm_index]);
-			rtl_set_bbreg(priv, ROFDM0_XCTXAFE,
-				      MASKH4BITS, 0x00);
-			rtl_set_bbreg(priv, ROFDM0_ECCATHRESHOLD,
-				      BIT(24), 0x00);
-			break;
-		case RF90_PATH_B:
-			rtl_set_bbreg(priv, ROFDM0_XBTXIQIMBALANCE,
-				      MASKDWORD, ofdmswing_table[ofdm_index]);
-			rtl_set_bbreg(priv, ROFDM0_XDTXAFE,
-				      MASKH4BITS, 0x00);
-			rtl_set_bbreg(priv, ROFDM0_ECCATHRESHOLD,
-				      BIT(28), 0x00);
-			break;
-		default:
-			break;
-		}
-	}
-}
-
 void rtl88e_phy_rf6052_set_bandwidth(struct rtl8xxxu_priv *priv, u8 bandwidth)
 {
 	switch (bandwidth) {
@@ -1725,39 +1601,6 @@ static void _rtl8188e_config_bb_reg(struct rtl8xxxu_priv *priv,
 	}
 }
 
-static bool _rtl88e_check_condition(struct rtl8xxxu_priv *priv,
-				    const u32  condition)
-{
-	u32 _board = rtlefuse.board_type; /*need efuse define*/
-	u32 _interface = INTF_USB;
-	u32 _platform = 0x08;/*SupportPlatform */
-	u32 cond = condition;
-
-	if (condition == 0xCDCDCDCD)
-		return true;
-
-	cond = condition & 0xFF;
-	if ((_board & cond) == 0 && cond != 0x1F)
-		return false;
-
-	cond = condition & 0xFF00;
-	cond = cond >> 8;
-	if ((_interface & cond) == 0 && cond != 0x07)
-		return false;
-
-	cond = condition & 0xFF0000;
-	cond = cond >> 16;
-	if ((_platform & cond) == 0 && cond != 0x0F)
-		return false;
-	return true;
-}
-
-#define READ_NEXT_PAIR(v1, v2, i)			\
-	do {						\
-		i += 2; v1 = array_table[i];		\
-		v2 = array_table[i+1];			\
-	} while (0)
-
 static void handle_branch1(struct rtl8xxxu_priv *priv, u16 arraylen,
 			   u32 *array_table)
 {
@@ -2202,33 +2045,6 @@ static u8 _rtl88e_phy_path_a_iqk(struct rtl8xxxu_priv *priv, bool config_pathb)
 	return result;
 }
 
-static u8 _rtl88e_phy_path_b_iqk(struct rtl8xxxu_priv *priv)
-{
-	u32 reg_eac, reg_eb4, reg_ebc, reg_ec4, reg_ecc;
-	u8 result = 0x00;
-
-	rtl_set_bbreg(priv, 0xe60, MASKDWORD, 0x00000002);
-	rtl_set_bbreg(priv, 0xe60, MASKDWORD, 0x00000000);
-	mdelay(IQK_DELAY_TIME);
-	reg_eac = rtl_get_bbreg(priv, 0xeac, MASKDWORD);
-	reg_eb4 = rtl_get_bbreg(priv, 0xeb4, MASKDWORD);
-	reg_ebc = rtl_get_bbreg(priv, 0xebc, MASKDWORD);
-	reg_ec4 = rtl_get_bbreg(priv, 0xec4, MASKDWORD);
-	reg_ecc = rtl_get_bbreg(priv, 0xecc, MASKDWORD);
-
-	if (!(reg_eac & BIT(31)) &&
-	    (((reg_eb4 & 0x03FF0000) >> 16) != 0x142) &&
-	    (((reg_ebc & 0x03FF0000) >> 16) != 0x42))
-		result |= 0x01;
-	else
-		return result;
-	if (!(reg_eac & BIT(30)) &&
-	    (((reg_ec4 & 0x03FF0000) >> 16) != 0x132) &&
-	    (((reg_ecc & 0x03FF0000) >> 16) != 0x36))
-		result |= 0x02;
-	return result;
-}
-
 static u8 _rtl88e_phy_path_a_rx_iqk(struct rtl8xxxu_priv *priv, bool config_pathb)
 {
 	u32 reg_eac, reg_e94, reg_e9c, reg_ea4, u32temp;
@@ -2423,13 +2239,6 @@ static void _rtl88e_phy_mac_setting_calibration(struct rtl8xxxu_priv *priv,
 		rtl8xxxu_write8(priv, macreg[i],
 			       (u8) (macbackup[i] & (~BIT(3))));
 	rtl8xxxu_write8(priv, macreg[i], (u8) (macbackup[i] & (~BIT(5))));
-}
-
-static void _rtl88e_phy_path_a_standby(struct rtl8xxxu_priv *priv)
-{
-	rtl_set_bbreg(priv, 0xe28, MASKDWORD, 0x0);
-	rtl_set_bbreg(priv, 0x840, MASKDWORD, 0x00010000);
-	rtl_set_bbreg(priv, 0xe28, MASKDWORD, 0x80800000);
 }
 
 static void _rtl88e_phy_pi_mode_switch(struct rtl8xxxu_priv *priv, bool pi_mode)
@@ -3573,22 +3382,9 @@ static u32 _rtl88eu_init_power_on(struct rtl8xxxu_priv *priv)
 	/* for SDIO - Set CR bit10 to enable 32k calibration. */
 
 	rtl8xxxu_write16(priv, REG_CR, value16);
-	/* TODO */
-#if 0
-	haldata->bMacPwrCtrlOn = true;
-#endif
 
 	return true;
 }
-
-void rtl88eu_enable_interrupt(struct rtl8xxxu_priv *priv)
-{
-}
-
-void rtl88eu_disable_interrupt(struct rtl8xxxu_priv *priv)
-{
-}
-
 
 /*  Shall USB interface init this? */
 static void _rtl88eu_init_interrupt(struct rtl8xxxu_priv *priv)
