@@ -2363,7 +2363,7 @@ static s32 _rtl88eu_llt_write(struct rtl8xxxu_priv *priv, u32 address, u32 data)
 	return status;
 }
 
-s32 rtl88eu_init_llt_table(struct rtl8xxxu_priv *priv, u8 boundary)
+int rtl88eu_init_llt_table(struct rtl8xxxu_priv *priv, u8 boundary)
 {
 	s32 status = false;
 	u32 i;
@@ -2556,208 +2556,6 @@ static void _rtl88eu_read_txpower_info(struct rtl8xxxu_priv *priv, u8 *hwinfo)
 	RT_TRACE(priv, COMP_ERR, DBG_WARNING,
 		 "eeprom_regulatory = 0x%x\n", rtlefuse.eeprom_regulatory);
 }
-
-static void efuse_power_switch(struct rtl8xxxu_priv *priv, u8 write, u8 pwrstate)
-{
-	u8 tempval;
-	u16 tmpV16;
-
-	rtl8xxxu_write8(priv, REG_EFUSE_ACCESS, 0x69);
-	tmpV16 = rtl8xxxu_read16(priv, REG_SYS_FUNC_EN);
-	
-	if (!(tmpV16 & FEN_ELDR)) {
-		tmpV16 |= FEN_ELDR; 
-		rtl8xxxu_write16(priv, REG_SYS_FUNC_EN, tmpV16);
-	}
-
-	tmpV16 = rtl8xxxu_read16(priv, REG_SYS_CLKR);
-	if ((!(tmpV16 & LOADER_CLK_EN)) ||
-			(!(tmpV16 & ANA8M))) {
-		tmpV16 |= (LOADER_CLK_EN | ANA8M);
-		rtl8xxxu_write16(priv, REG_SYS_CLKR, tmpV16);
-	}
-
-	if (pwrstate) {
-		if (write) {
-			tempval = rtl8xxxu_read8(priv, REG_EFUSE_TEST + 3);
-			tempval &= 0x0F;
-			tempval |= (VOLTAGE_V25 << 4);
-			rtl8xxxu_write8(priv, REG_EFUSE_TEST + 3,
-					(tempval | 0x80));
-		}
-	} else {
-		rtl8xxxu_write8(priv,
-				REG_EFUSE_ACCESS, 0);
-		if (write) {
-			tempval = rtl8xxxu_read8(priv, REG_EFUSE_TEST + 3);
-			rtl8xxxu_write8(priv, REG_EFUSE_TEST + 3,
-				       (tempval & 0x7F));
-		}
-	}
-}
-
-void read_efuse_byte(struct rtl8xxxu_priv *priv, u16 _offset, u8 *pbuf)
-{
-	u32 value32;
-	u8 readbyte;
-	u16 retry;
-
-	rtl8xxxu_write8(priv, REG_EFUSE_CTRL + 1,
-		       (_offset & 0xff));
-	readbyte = rtl8xxxu_read8(priv, REG_EFUSE_CTRL + 2);
-	rtl8xxxu_write8(priv, REG_EFUSE_CTRL + 2,
-		       ((_offset >> 8) & 0x03) | (readbyte & 0xfc));
-
-	readbyte = rtl8xxxu_read8(priv, REG_EFUSE_CTRL + 3);
-	rtl8xxxu_write8(priv, REG_EFUSE_CTRL + 3,
-		       (readbyte & 0x7f));
-
-	retry = 0;
-	value32 = rtl8xxxu_read32(priv, REG_EFUSE_CTRL);
-	while (!(((value32 >> 24) & 0xff) & 0x80) && (retry < 10000)) {
-		value32 = rtl8xxxu_read32(priv, REG_EFUSE_CTRL);
-		retry++;
-	}
-
-	udelay(50);
-	value32 = rtl8xxxu_read32(priv, REG_EFUSE_CTRL);
-
-	*pbuf = (u8) (value32 & 0xff);
-}
-
-void read_efuse(struct rtl8xxxu_priv *priv, u16 _offset, u16 _size_byte, u8 *pbuf)
-{
-	u8 *efuse_tbl;
-	u8 rtemp8[1];
-	u16 efuse_addr = 0;
-	u8 offset, wren;
-	u8 u1temp = 0;
-	u16 i;
-	u16 j;
-	const u16 efuse_max_section = EFUSE_MAX_SECTION;
-	const u32 efuse_len = EFUSE_REAL_CONTENT_LEN;
-	u16 **efuse_word;
-	u8 efuse_usage;
-
-	if ((_offset + _size_byte) > HWSET_MAX_SIZE) {
-		RT_TRACE(priv, COMP_EFUSE, DBG_LOUD,
-			 "read_efuse(): Invalid offset(%#x) with read bytes(%#x)!!\n",
-			 _offset, _size_byte);
-		return;
-	}
-
-	/* allocate memory for efuse_tbl and efuse_word */
-	efuse_tbl = kzalloc(HWSET_MAX_SIZE * sizeof(u8), GFP_ATOMIC);
-	if (!efuse_tbl)
-		return;
-	efuse_word = kzalloc(EFUSE_MAX_WORD_UNIT * sizeof(u16 *), GFP_ATOMIC);
-	if (!efuse_word)
-		goto out;
-	for (i = 0; i < EFUSE_MAX_WORD_UNIT; i++) {
-		efuse_word[i] = kzalloc(efuse_max_section * sizeof(u16),
-					GFP_ATOMIC);
-		if (!efuse_word[i])
-			goto done;
-	}
-
-	for (i = 0; i < efuse_max_section; i++)
-		for (j = 0; j < EFUSE_MAX_WORD_UNIT; j++)
-			efuse_word[j][i] = 0xFFFF;
-
-	read_efuse_byte(priv, efuse_addr, rtemp8);
-	if (*rtemp8 != 0xFF)
-		efuse_addr++;
-
-	while ((*rtemp8 != 0xFF) && (efuse_addr < efuse_len)) {
-		/*  Check PG header for section num.  */
-		if ((*rtemp8 & 0x1F) == 0x0F) {/* extended header */
-			u1temp = ((*rtemp8 & 0xE0) >> 5);
-			read_efuse_byte(priv, efuse_addr, rtemp8);
-
-			if ((*rtemp8 & 0x0F) == 0x0F) {
-				efuse_addr++;
-				read_efuse_byte(priv, efuse_addr, rtemp8);
-
-				if (*rtemp8 != 0xFF &&
-				    (efuse_addr < efuse_len)) {
-					efuse_addr++;
-				}
-				continue;
-			} else {
-				offset = ((*rtemp8 & 0xF0) >> 1) | u1temp;
-				wren = (*rtemp8 & 0x0F);
-				efuse_addr++;
-			}
-		} else {
-			offset = ((*rtemp8 >> 4) & 0x0f);
-			wren = (*rtemp8 & 0x0f);
-		}
-
-		if (offset < efuse_max_section) {
-			for (i = 0; i < EFUSE_MAX_WORD_UNIT; i++) {
-				if (!(wren & 0x01)) {
-					read_efuse_byte(priv, efuse_addr, rtemp8);
-					efuse_addr++;
-					efuse_word[i][offset] =
-							 (*rtemp8 & 0xff);
-
-					if (efuse_addr >= efuse_len)
-						break;
-
-					read_efuse_byte(priv, efuse_addr, rtemp8);
-					efuse_addr++;
-					efuse_word[i][offset] |=
-					    (((u16)*rtemp8 << 8) & 0xff00);
-
-					if (efuse_addr >= efuse_len)
-						break;
-				}
-
-				wren >>= 1;
-			}
-		}
-
-		read_efuse_byte(priv, efuse_addr, rtemp8);
-		if (*rtemp8 != 0xFF && (efuse_addr < efuse_len)) {
-			efuse_addr++;
-		}
-	}
-
-	for (i = 0; i < efuse_max_section; i++) {
-		for (j = 0; j < EFUSE_MAX_WORD_UNIT; j++) {
-			efuse_tbl[(i * 8) + (j * 2)] =
-			    (efuse_word[j][i] & 0xff);
-			efuse_tbl[(i * 8) + ((j * 2) + 1)] =
-			    ((efuse_word[j][i] >> 8) & 0xff);
-		}
-	}
-
-	for (i = 0; i < _size_byte; i++)
-		pbuf[i] = efuse_tbl[_offset + i];
-done:
-	for (i = 0; i < EFUSE_MAX_WORD_UNIT; i++)
-		kfree(efuse_word[i]);
-	kfree(efuse_word);
-out:
-	kfree(efuse_tbl);
-}
-
-
-
-static void efuse_read_all_map(struct rtl8xxxu_priv *priv, u8 *efuse)
-{
-	efuse_power_switch(priv, false, true);
-	read_efuse(priv, 0, HWSET_MAX_SIZE, efuse);
-	efuse_power_switch(priv, false, false);
-}
-
-void rtl_efuse_shadow_map_update(struct rtl8xxxu_priv *priv)
-{
-	efuse_read_all_map(priv, &rtlefuse.efuse_map[EFUSE_INIT_MAP][0]);
-	memcpy(&rtlefuse.efuse_map[EFUSE_MODIFY_MAP][0], &rtlefuse.efuse_map[EFUSE_INIT_MAP][0],
-			HWSET_MAX_SIZE);
-}
-
 
 bool rtl_hal_pwrseqcmdparsing(struct rtl8xxxu_priv *priv, u8 cut_version,
 			      u8 faversion, u8 interface_type,
@@ -3251,12 +3049,16 @@ static int _rtl88eu_init_mac(struct rtl8xxxu_priv *priv)
 #else
 	boundary = WMM_NORMAL_TX_PAGE_BOUNDARY_88E;
 #endif
+#if 0
 	if (false == rtl88eu_init_llt_table(priv, boundary)) {
 	
 		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
 			 "Failed to init LLT table\n");
 		return -EINVAL;
 	}
+#else
+	priv->fops->llt_init(priv, boundary);
+#endif
 
 	_rtl88eu_init_queue_reserved_page(priv);
 	_rtl88eu_init_txbuffer_boundary(priv, 0);
@@ -3380,11 +3182,6 @@ void rtl88eu_card_disable(struct rtl8xxxu_priv *priv)
 	rtlphy.iqk_initialized = false;
 }
 
-void rtl88eu_update_interrupt_mask(struct rtl8xxxu_priv *priv,
-				   u32 add_msr, u32 rm_msr)
-{
-}
-
 void rtl88eu_enable_hw_security_config(struct rtl8xxxu_priv *priv)
 {
 	u8 sec_reg_value;
@@ -3456,7 +3253,6 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 #endif
 	rtl8188eu_init_mac(priv);
 	rtl88e_phy_bb_config(priv);
-	//rtl88e_phy_rf_config(priv);
 	priv->fops->init_phy_rf(priv);
 	rtlphy.rfreg_chnlval[0] = rtl_get_rfreg(priv, (enum radio_path)0,
 				      RF_CHNLBW, RFREG_OFFSET_MASK);
@@ -3479,7 +3275,7 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 	for (i = 0; i < ETH_ALEN; i++)
 		rtl8xxxu_write8(priv, REG_MACID + i, priv->mac_addr[i]);
 
-	rtl88e_phy_set_txpower_level(priv, rtlphy.current_channel, false);
+	priv->fops->set_tx_power(priv, rtlphy.current_channel, false);
 	_rtl88eu_init_ant_selection(priv);
 	rtl8xxxu_write32(priv, REG_BAR_MODE_CTRL, 0x0201ffff);
 	rtl8xxxu_write8(priv, REG_HWSEQ_CTRL, 0xFF);
@@ -3820,7 +3616,7 @@ struct rtl8xxxu_fileops rtl8188eu_fops = {
 	.power_on = rtl8192eu_power_on,
 	.power_off = rtl88eu_card_disable,
 	.reset_8051 = rtl8xxxu_reset_8051,
-	.llt_init = rtl8xxxu_auto_llt_table,
+	.llt_init = rtl8xxxu_init_llt_table,
 	.init_phy_bb = rtl8192eu_init_phy_bb,
 	.init_phy_rf = rtl8188eu_init_phy_rf,
 	.phy_iq_calibrate = rtl88e_phy_iq_calibrate,
