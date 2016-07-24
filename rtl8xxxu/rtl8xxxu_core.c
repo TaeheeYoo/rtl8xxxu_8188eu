@@ -2257,6 +2257,9 @@ rtl8xxxu_init_mac(struct rtl8xxxu_priv *priv)
 
 	if (priv->rtl_chip != RTL8723B && priv->rtl_chip != RTL8192E)
 		rtl8xxxu_write8(priv, REG_MAX_AGGR_NUM, 0x0a);
+	else if(priv->rtl_chip == RTL8188E)
+		rtl8xxxu_write8(priv, REG_MAX_AGGR_NUM, 0x0b);
+
 
 	return 0;
 }
