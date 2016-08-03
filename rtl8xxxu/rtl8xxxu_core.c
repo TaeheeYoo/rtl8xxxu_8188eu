@@ -6318,9 +6318,8 @@ static int rtl8xxxu_probe(struct usb_interface *interface,
 	if (priv->rtl_chip == RTL8188E)
 		priv->fops->init_device(hw);
 	else
-		ret = rtl8xxxu_init_device(hw);
 #else
-	priv->fops->init_device(hw);
+		ret = rtl8xxxu_init_device(hw);
 #endif
 
 	hw->wiphy->max_scan_ssids = 1;

@@ -893,13 +893,6 @@ static bool phy_config_bb_with_pghdr(struct rtl8xxxu_priv *priv)
 	return true;
 }
 
-#define READ_NEXT_RF_PAIR(v1, v2, i) \
-do { \
-	i += 2; \
-	v1 = radioa_array_table[i]; \
-	v2 = radioa_array_table[i+1]; \
-} while (0)
-
 static void handle_path_a(u8 index,
 			  u8 *cckpowerlevel, u8 *ofdmpowerlevel,
 			  u8 *bw20powerlevel, u8 *bw40powerlevel)
@@ -1651,21 +1644,15 @@ static void _rtl88e_phy_set_rfpath_switch(struct rtl8xxxu_priv *priv,
 				BIT(14) | BIT(13) | BIT(12), 0);
 		rtl_set_bbreg(priv, RFPGA0_XB_RFINTERFACEOE,
 				BIT(5) | BIT(4) | BIT(3), 0);
-#if 1
-		/* 알아보고 구현할것 */
 		if (rtlefuse.antenna_div_type == CGCS_RX_HW_ANTDIV)
 			rtl_set_bbreg(priv, RCONFIG_RAM64x16, BIT(31), 0);
-#endif
 	} else {
 		rtl_set_bbreg(priv, RFPGA0_XA_RFINTERFACEOE,
 				BIT(14) | BIT(13) | BIT(12), 1);
 		rtl_set_bbreg(priv, RFPGA0_XB_RFINTERFACEOE,
 				BIT(5) | BIT(4) | BIT(3), 1);
-#if 1
-		/* 알아보고 구현할것. */
 		if (rtlefuse.antenna_div_type == CGCS_RX_HW_ANTDIV)
 			rtl_set_bbreg(priv, RCONFIG_RAM64x16, BIT(31), 1);
-#endif
 	}
 }
 
@@ -2183,7 +2170,7 @@ static void _rtl88eu_read_txpower_info(struct rtl8xxxu_priv *priv, u8 *hwinfo)
 		rtlefuse.eeprom_regulatory =
 			(EEPROM_DEFAULT_BOARD_OPTION & 0x7);
 	
-	if (!rtlefuse.eeprom_regulatory) {
+	if (rtlefuse.eeprom_regulatory) {
 		dev_err(&priv->udev->dev, "%s:Unsupported regulatory : %d\n",
 				__func__, rtlefuse.eeprom_regulatory);
 	}
@@ -2342,6 +2329,7 @@ static void _rtl88eu_init_interrupt(struct rtl8xxxu_priv *priv)
 
 static void _rtl88eu_init_queue_reserved_page(struct rtl8xxxu_priv *priv)
 {
+	//여기 if문으로 추가해야함.
 	rtl8xxxu_write16(priv, REG_RQPN_NPQ, 0x0000);
 	rtl8xxxu_write16(priv, REG_RQPN_NPQ, 0x0d);
 	rtl8xxxu_write32(priv, REG_RQPN, 0x808e000d);
@@ -2356,13 +2344,6 @@ static void _rtl88eu_init_txbuffer_boundary(struct rtl8xxxu_priv *priv,
 	rtl8xxxu_write8(priv, REG_TXPKTBUF_WMAC_LBK_BF_HD, boundary);
 	rtl8xxxu_write8(priv, REG_TRXFF_BNDY, boundary);
 	rtl8xxxu_write8(priv, REG_TDECTRL + 1, boundary);
-}
-
-static void _rtl88eu_init_page_boundary(struct rtl8xxxu_priv *priv)
-{
-	u16 rxff_bndy = 0x2400 - 1;
-
-	rtl8xxxu_write16(priv, (REG_TRXFF_BNDY + 2), rxff_bndy);
 }
 
 static void _rtl88eu_init_normal_chip_reg_priority(struct rtl8xxxu_priv *priv,
@@ -2383,14 +2364,8 @@ static void _rtl88eu_init_normal_chip_two_out_ep_priority(
 							struct rtl8xxxu_priv *priv)
 {
 	u16 be_q, bk_q, vi_q, vo_q, mgt_q, hi_q;
-#if 0
 	u16 value_hi = 0;
 	u16 value_low = 0;
-#else
-	u16 value_hi = 0;
-	u16 value_low = 0;
-
-#endif
 #if 1
 	value_hi = QUEUE_HIGH;
 	value_low = QUEUE_NORMAL;
@@ -2407,6 +2382,14 @@ static void _rtl88eu_init_normal_chip_two_out_ep_priority(
 	hi_q	= value_hi;
 	
 	_rtl88eu_init_normal_chip_reg_priority(priv, be_q, bk_q, vi_q, vo_q, mgt_q, hi_q);
+}
+
+static void _rtl88eu_init_normal_chip_one_out_ep_priority(
+							struct rtl8xxxu_priv *priv)
+{
+	u16 value = QUEUE_HIGH;
+	_rtl88eu_init_normal_chip_reg_priority(priv, value, value, value, value,
+					       value, value);
 }
 
 static void _rtl88eu_init_queue_priority(struct rtl8xxxu_priv *priv)
@@ -2426,7 +2409,8 @@ static void _rtl88eu_init_queue_priority(struct rtl8xxxu_priv *priv)
 		break;
 	}
 #else
-	_rtl88eu_init_normal_chip_two_out_ep_priority(priv);
+	//_rtl88eu_init_normal_chip_two_out_ep_priority(priv);
+	_rtl88eu_init_normal_chip_one_out_ep_priority(priv);
 #endif
 }
 
@@ -2543,25 +2527,16 @@ error_out:
 	return 1;
 }
 
-static void _rtl88eu_init_transfer_page_size(struct rtl8xxxu_priv *priv)
-{
-	u8 value8;
-
-	value8 = _PSRX(PBP_128) | _PSTX(PBP_128);
-	rtl8xxxu_write8(priv, REG_PBP, value8);
-}
-
 static void _rtl88eu_init_driver_info_size(struct rtl8xxxu_priv *priv,
 					   u8 drv_info_size)
 {
-
-	rtl8xxxu_write8(priv, REG_RX_DRVINFO_SZ, drv_info_size);
 }
 
 static void _rtl88eu_init_wmac_setting(struct rtl8xxxu_priv *priv)
 {
 	u32 val32;
 
+	//val32 부분은 에외처리 할것
 	val32 = RCR_AAP | RCR_APM | RCR_AM | RCR_AB |
 				  RCR_CBSSID_DATA | RCR_CBSSID_BCN |
 				  RCR_APP_ICV | RCR_AMF | RCR_HTC_LOC_CTRL |
@@ -2645,80 +2620,6 @@ static void _rtl88eu_beacon_function_enable(struct rtl8xxxu_priv *priv)
 	rtl8xxxu_write8(priv, REG_BCN_CTRL, (BIT(4) | BIT(3) | BIT(1)));
 	rtl8xxxu_write8(priv, REG_RD_CTRL + 1, 0x6F);
 }
-
-static void _rtl88eu_bb_turn_on_block(struct rtl8xxxu_priv *priv)
-{
-	rtl_set_bbreg(priv, RFPGA0_RFMOD, BCCKEN, 0x1);
-	rtl_set_bbreg(priv, RFPGA0_RFMOD, BOFDMEN, 0x1);
-}
-
-static void _rtl88eu_init_ant_selection(struct rtl8xxxu_priv *priv)
-{
-
-#if 0
-	if (rtlefuse.antenna_div_cfg == 0)
-		return;
-#endif
-
-	rtl8xxxu_write32(priv, REG_LEDCFG0,
-			rtl8xxxu_read32(priv, REG_LEDCFG0)|BIT(23));
-	rtl_set_bbreg(priv, RFPGA0_XAB_RFPARAMETER, BIT(13), 0x01);
-}
-
-static int _rtl88eu_init_mac(struct rtl8xxxu_priv *priv)
-{
-	int err = 0;
-	u32 boundary = 0;
-	
-	err = priv->fops->power_on(priv);
-	if (err == false) {
-		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
-			 "Failed to init power on!\n");
-		return err;
-	}
-#if 1
-	boundary = TX_PAGE_BOUNDARY_88E;
-#else
-	boundary = WMM_NORMAL_TX_PAGE_BOUNDARY_88E;
-#endif
-#if 0
-	if (false == rtl88eu_init_llt_table(priv, boundary)) {
-	
-		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
-			 "Failed to init LLT table\n");
-		return -EINVAL;
-	}
-#else
-	priv->fops->llt_init(priv, boundary);
-#endif
-
-	_rtl88eu_init_queue_reserved_page(priv);
-	_rtl88eu_init_txbuffer_boundary(priv, 0);
-	_rtl88eu_init_page_boundary(priv);
-	_rtl88eu_init_transfer_page_size(priv);
-	_rtl88eu_init_queue_priority(priv);
-	_rtl88eu_init_driver_info_size(priv, 4);
-	_rtl88eu_init_interrupt(priv);
-	_rtl88eu_init_wmac_setting(priv);
-	_rtl88eu_init_adaptive_ctrl(priv);
-	_rtl88eu_init_edca(priv);
-	_rtl88eu_init_retry_function(priv);
-	
-	//여기 꼭 enable 해야함
-	//rtl88e_phy_set_bw_mode(priv, NL80211_CHAN_HT20);
-	_rtl88eu_init_beacon_parameters(priv);
-	_rtl88eu_init_txbuffer_boundary(priv, boundary);
-	return 0;
-}
-
-void rtl_cam_reset_all_entry(struct rtl8xxxu_priv *priv)
-{
-	u32 ul_command;
-
-	ul_command = BIT(31) | BIT(30);
-	rtl8xxxu_write32(priv, REG_CAMCMD, ul_command);
-}
-
 
 static void _rtl88eu_hw_power_down(struct rtl8xxxu_priv *priv)
 {
@@ -2840,7 +2741,7 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 	u16 value16;
 	u32 status = true;
 	unsigned long flags;
-	int i;
+	int i, err;
 
 	reg_bcn_ctrl_val = 0;
 
@@ -2852,13 +2753,50 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 	local_save_flags(flags);
 	local_irq_disable();
 
-	status = _rtl88eu_init_mac(priv);
-	if (status) {
-		RT_TRACE(priv, COMP_ERR, DBG_EMERG, "init mac failed!\n");
-		goto exit;
-	}
-	
 	local_irq_enable();
+	err = priv->fops->power_on(priv);
+	if (err == false) {
+		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
+			 "Failed to init power on!\n");
+		return err;
+	}
+#if 0
+	if (false == rtl88eu_init_llt_table(priv, boundary)) {
+	
+		RT_TRACE(priv, COMP_ERR, DBG_EMERG,
+			 "Failed to init LLT table\n");
+		return -EINVAL;
+	}
+#else
+	priv->fops->llt_init(priv, TX_PAGE_BOUNDARY_88E- 1);
+#endif
+
+	_rtl88eu_init_queue_reserved_page(priv);
+	_rtl88eu_init_txbuffer_boundary(priv, 0);
+	
+	rtl8xxxu_write16(priv, REG_TRXFF_BNDY + 2, priv->fops->trxff_boundary);
+	
+	value8 = (priv->fops->pbp_rx << PBP_PAGE_SIZE_RX_SHIFT) |
+		(priv->fops->pbp_tx << PBP_PAGE_SIZE_TX_SHIFT);
+	if (priv->rtl_chip != RTL8192E)
+		rtl8xxxu_write8(priv, REG_PBP, value8);
+
+	_rtl88eu_init_queue_priority(priv);
+	
+	rtl8xxxu_write8(priv, REG_RX_DRVINFO_SZ, 4);
+
+	_rtl88eu_init_interrupt(priv);
+	_rtl88eu_init_wmac_setting(priv);
+	_rtl88eu_init_adaptive_ctrl(priv);
+	_rtl88eu_init_edca(priv);
+	_rtl88eu_init_retry_function(priv);
+	
+	//여기 꼭 enable 해야함
+	//rtl88e_phy_set_bw_mode(priv, NL80211_CHAN_HT20);
+	_rtl88eu_init_beacon_parameters(priv);
+	//표준루틴과 다름, boundary값 유일함.
+	_rtl88eu_init_txbuffer_boundary(priv, TX_PAGE_BOUNDARY_88E);
+
 #if 0
 	rtlhal->last_hmeboxnum = 0;
 	rtlphy.iqk_initialized = false;
@@ -2888,15 +2826,17 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 	rtl8xxxu_write8(priv, REG_EARLY_MODE_CONTROL, 0);
 	rtl8xxxu_write16(priv, REG_PKT_VO_VI_LIFE_TIME, 0x0400);
 	rtl8xxxu_write16(priv, REG_PKT_BE_BK_LIFE_TIME, 0x0400);
-	_rtl88eu_bb_turn_on_block(priv);
-	rtl_cam_reset_all_entry(priv);
-	rtl88eu_enable_hw_security_config(priv);
+	
+	rtl_set_bbreg(priv, RFPGA0_RFMOD, BCCKEN, 0x1);
+	rtl_set_bbreg(priv, RFPGA0_RFMOD, BOFDMEN, 0x1);
+
+	rtl8xxxu_write32(priv, REG_CAM_CMD, CAM_CMD_POLLING | BIT(30));
+	//rtl88eu_enable_hw_security_config(priv);
 
 	for (i = 0; i < ETH_ALEN; i++)
 		rtl8xxxu_write8(priv, REG_MACID + i, priv->mac_addr[i]);
 
 	priv->fops->set_tx_power(priv, rtlphy.current_channel, false);
-	_rtl88eu_init_ant_selection(priv);
 	rtl8xxxu_write32(priv, REG_BAR_MODE_CTRL, 0x0201ffff);
 	rtl8xxxu_write8(priv, REG_HWSEQ_CTRL, 0xFF);
 
@@ -2907,40 +2847,25 @@ int rtl88eu_hw_init(struct ieee80211_hw *hw)
 	rtl8xxxu_write16(priv, REG_TXDMA_OFFSET_CHK,
 		       (rtl8xxxu_read16(priv, REG_TXDMA_OFFSET_CHK) |
 			DROP_DATA_EN));
-#if 0
-	if (ppsc->rfpwr_state == ERFON) {
-		if ((rtlefuse.antenna_div_type == CGCS_RX_HW_ANTDIV) ||
-		    ((rtlefuse.antenna_div_type == CG_TRX_HW_ANTDIV) &&
-		     (rtlhal->oem_id == RT_CID_819X_HP))) {
-#else
-	if (1) {
-		if (rtlefuse.antenna_div_type == CGCS_RX_HW_ANTDIV) {
-#endif
-			rtl88e_phy_set_rfpath_switch(priv, true);
-			rtldm.fat_table.rx_idle_ant = MAIN_ANT;
-		} else {
-			rtl88e_phy_set_rfpath_switch(priv, false);
-			rtldm.fat_table.rx_idle_ant = AUX_ANT;
-		}
-		RT_TRACE(priv, COMP_INIT, DBG_LOUD, "rx idle ant %s\n",
-			 (rtldm.fat_table.rx_idle_ant == MAIN_ANT) ?
-			 ("MAIN_ANT") : ("AUX_ANT"));
-
-		if (rtlphy.iqk_initialized) {
-				rtl88e_phy_iq_calibrate(priv);
-		} else {
-			rtl88e_phy_iq_calibrate(priv);
-			rtlphy.iqk_initialized = true;
-		}
-		//rtl88e_dm_check_txpower_tracking(priv);
-		rtl88e_phy_lc_calibrate(priv, false);
-	}
 	
+	rtl88e_phy_set_rfpath_switch(priv, false);
+
+	if (rtlphy.iqk_initialized) {
+		rtl88e_phy_iq_calibrate(priv);
+	} else {
+		rtl88e_phy_iq_calibrate(priv);
+		rtlphy.iqk_initialized = true;
+	}
+	//rtl88e_dm_check_txpower_tracking(priv);
+	rtl88e_phy_lc_calibrate(priv, false);
+
 	rtl8xxxu_write8(priv, REG_USB_HRPWM, 0);
 	rtl8xxxu_write32(priv, REG_FWHW_TXQ_CTRL,
 			rtl8xxxu_read32(priv, REG_FWHW_TXQ_CTRL)|BIT(12));
-	//rtl88e_dm_init(priv);
+#if 0
+	rtl88e_dm_init(priv);
 	rtl88eu_hal_notch_filter(priv, 0);
+#endif
 	local_irq_restore(flags);
 	return 0;
 exit:
@@ -3000,6 +2925,8 @@ static int rtl8188eu_parse_efuse(struct rtl8xxxu_priv *priv)
 	if (rtlefuse.antenna_div_type == CG_TRX_HW_ANTDIV ||
 			rtlefuse.antenna_div_type == CGCS_RX_HW_ANTDIV)
 		rtlefuse.antenna_div_cfg = 1;
+
+	printk("[TEST]antenna_div_type = %d\n", rtlefuse.antenna_div_type);
 
 	rtlefuse.board_type = (hwinfo[EEPROM_RF_BOARD_OPTION_88E]
 			& 0xE0) >> 5;
